@@ -12,6 +12,8 @@ import com.getcapacitor.annotation.Permission;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import java.util.Iterator;
+import java.util.ArrayList;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 @CapacitorPlugin(
@@ -224,30 +226,17 @@ public class FirebaseAnalytics extends Plugin {
       String name = call.getString("name");
       JSObject data = call.getData();
       JSONObject params = data.getJSObject("params");
-      Bundle bundle = new Bundle();
 
       if (params != null) {
-        Iterator<String> keys = params.keys();
-
-        while (keys.hasNext()) {
-          String key = keys.next();
-          Object value = params.get(key);
-
-          if (value instanceof String) {
-            bundle.putString(key, (String) value);
-          } else if (value instanceof Integer) {
-            bundle.putInt(key, (Integer) value);
-          } else if (value instanceof Double) {
-            bundle.putDouble(key, (Double) value);
-          } else if (value instanceof Long) {
-            bundle.putLong(key, (Long) value);
-          } else {
-            call.reject("value for " + key + " is missing");
-          }
+        try {
+          Bundle bundle = this.toBundle(params);
+          mFirebaseAnalytics.logEvent(name, bundle);
+        } catch (Exception key) {
+          call.reject("value for " + key + " is missing");
         }
       }
+      
 
-      mFirebaseAnalytics.logEvent(name, bundle);
       call.resolve();
     } catch (Exception ex) {
       call.reject(ex.getLocalizedMessage());
@@ -321,4 +310,42 @@ public class FirebaseAnalytics extends Plugin {
     mFirebaseAnalytics.setSessionTimeoutDuration(duration);
     call.resolve();
   }
+
+  private Bundle toBundle(JSONObject params) throws Exception {
+    Bundle bundle = new Bundle();
+    Iterator<String> keys = params.keys();
+
+    while (keys.hasNext()) {
+      String key = keys.next();
+      Object value = params.opt(key);
+
+      if (value instanceof JSONObject) {
+        bundle.putBundle(key, this.toBundle((JSONObject) value));
+      } else if (value instanceof JSONArray) {
+        bundle.putParcelableArrayList(key, toBundle((JSONArray) value));
+      } else if (value instanceof Boolean) {
+        bundle.putBoolean(key, (Boolean) value);
+      } else if (value instanceof String) {
+        bundle.putString(key, (String) value);
+      } else if (value instanceof Integer) {
+        bundle.putInt(key, (Integer) value);
+      } else if (value instanceof Double) {
+        bundle.putDouble(key, (Double) value);
+      } else if (value instanceof Long) {
+        bundle.putLong(key, (Long) value);
+      } else {
+        throw new Exception(key);
+      }
+    }
+
+    return bundle;
+  }
+  private ArrayList<Bundle> toBundle(final JSONArray array) {
+    ArrayList<Bundle> bundles = new ArrayList<>();
+    for (int i = 0, size = array.length(); i < size; i++) {
+      bundles.add(toBundle(array.optJSONObject(i)));
+    }
+    return bundles;
+  }
+
 }
